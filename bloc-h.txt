@@ -1,0 +1,27 @@
+#include <stdio.h>
+#include <time.h>
+#include <stdlib.h>
+#include <string.h>
+#include "sha256.h"
+#include "sha256_utils.h"
+
+#define diff 4
+#define max_nb_trans 10
+#define max_nb_bloc 10
+#define max_nb_users 10
+
+//Strucuture générale d'un bloc
+struct Bloc{
+    int indice, nb_trans, nonce;
+    char prev_hash[SHA256_BLOCK_SIZE*2 + 1], hash_root[SHA256_BLOCK_SIZE*2 + 1], curr_hash[SHA256_BLOCK_SIZE*2 + 1];
+    char timestamp[26];
+    char liste[max_nb_trans][50];
+};
+
+void generate_trans(unsigned char liste[max_nb_trans][45], int nb_trans);
+
+char * getTimeStamp();
+
+void mTree(char hashRes[SHA256_BLOCK_SIZE*2 + 1], char liste[max_nb_trans][50], int nb_trans);
+
+void initBloc(struct Bloc blockchain[max_nb_bloc], int nbBloc);

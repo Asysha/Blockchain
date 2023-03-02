@@ -1,0 +1,222 @@
+#include <stdio.h>
+#include <time.h>
+#include <stdlib.h>
+#include <string.h>
+#include <assert.h>
+#include "sha256.h"
+#include "sha256_utils.h"
+
+#define difficulte 4
+#define max_nb_trans 10
+#define max_nb_bloc 10
+#define max_nb_users 10
+
+
+//Strucuture générale d'un bloc
+struct Bloc{
+    int indice, nb_trans, nonce;
+    char prev_hash[SHA256_BLOCK_SIZE*2 + 1], hash_root[SHA256_BLOCK_SIZE*2 + 1], curr_hash[SHA256_BLOCK_SIZE*2 + 1];
+    time_t timestamp;
+    char liste[max_nb_trans][50];
+};
+
+//Strucuture générale de la blockchain
+struct Blockchain {
+    struct Bloc liste[max_nb_bloc];
+    int diff; 
+    int nbBloc;
+};
+
+//Recuperer l'heure a l'instant
+char * getTimeStamp() {
+  time_t ltime;
+  time(&ltime);
+  return ctime(&ltime); //modele :  "Fri Jan 19 13 :40 :09 2018"
+}
+
+//pour appeler le sha56 : void sha256ofString(BYTE * str,char hashRes[SHA256_BLOCK_SIZE*2 + 1])
+
+//Generer liste de transactions aleatoire (modele : "Source usern-Destination : userm $$$$$$$$" soit environ 50caracteres)
+void generate_trans(char liste[max_nb_trans][50], int nb_trans) {
+  //1 Bnb = 10^8 satoBnb
+  long int montant_s;
+  char* liste_user[10] = {"Creator", "Thomas", "Solene", "Lola", "Antonin", "Valentin", "Alicia", "Pauline", "Remi", "Papion" };
+  //Pour aleatoire
+  srand(time(NULL));
+  //Boucle de remplissage de la liste
+  for (int co = 0 ; co<nb_trans ; co++) {
+    char transaction[50];
+    //100*10^8 car MAX_VALUE + conversion en satoBnB
+    montant_s = rand()%1000000000+1;
+    //Generation de deux users aleatoirement
+    int indice_usern = rand()%20;
+    int indice_userm = rand()%20;
+    //Verification que les deux utilisateurs sont differents
+    while(indice_usern == indice_userm) {
+      indice_userm = rand()%20;
+    }
+    //Construction de la chaine de caractere suivant le modele
+    sprintf(transaction,"Source %s-Destination %s %ld", liste_user[indice_usern], liste_user[indice_userm], montant_s);
+    //Inscription dans la liste
+    memcpy(liste[co], transaction, 50);
+  }
+}
+
+void trans_wp(char transaction[50], const char* nomUser_s, const char* nomUser_d, long int montant_s) {
+  //Creation de la chaine
+  sprintf(transaction,"Source %s-Destination %s %ld", nomUser_s, nomUser_d, montant_s);
+}
+
+void mTree(char hashRes[SHA256_BLOCK_SIZE*2 + 1], char liste[max_nb_trans][50], int nb_trans) {
+  //Initialisation :
+  char hashRes1[SHA256_BLOCK_SIZE*4 + 2];
+  char hashRes2[SHA256_BLOCK_SIZE*2 + 1];
+  int taille = nb_trans;
+  char** listeRes = NULL;
+  //Liste de taille variable
+  listeRes = malloc(nb_trans*sizeof(char*));
+  //Verification de l'allocation
+  if(listeRes == NULL) {
+    perror("erreur d'allocation");
+  }
+  //Copie de la liste dans la liste dynamique
+  for (int i = 0; i < nb_trans; i++) {
+    listeRes[i] = malloc(sizeof(char) * (SHA256_BLOCK_SIZE * 2 + 1));
+  	strcpy(listeRes[i], liste[i]);
+  }
+  int indice;
+  //Boucle réalisant l'arbre de merkle
+  while (taille > 1) {
+    indice = 0;
+    for (int co = 0; co < taille; co += 2) { 
+      sha256ofString((BYTE *)listeRes[co], hashRes1);
+      //Si dernier, liste taille impaire donc else, dedoublement du solitaire
+      if (co < taille -1) {
+        sha256ofString((BYTE *)listeRes[co+1], hashRes2);
+        strcat(hashRes1, hashRes2);
+      }
+      else {
+          char hashResTmp[SHA256_BLOCK_SIZE * 4 + 1];
+          strcpy(hashResTmp, hashRes1);
+          strcat(hashRes1, hashResTmp);
+      }
+      //On calcule le hash des deux hash concaténés, et on l'inscrit dans la liste
+      sha256ofString((BYTE *)hashRes1, listeRes[indice]);
+      indice++;
+    }
+    //Si impair, on ajoute 1 car on debouble le solitaire
+    if (taille%2 == 0) {
+      taille = taille/2;
+    }
+    else {
+      taille = (taille+ 1)/2;
+    }
+  }
+  //Sauvegarde du resultat
+  strcpy(hashRes, listeRes[0]);
+  
+  /*for (int i = 0; i < nb_trans; ++i)
+      free(listeRes[i]);
+  free(listeRes);*/
+}
+
+void initBloc(struct Blockchain *blockchain){
+  if ((*blockchain).nbBloc > max_nb_bloc) {
+    printf("Blockchain pleine, création de bloc impossible.\n");
+  }
+  else {
+    //Sinon pb de depassement de memoire
+    srand(time(NULL));
+    //Initialisation bloc
+    printf("NB BLOC : %d\n", (*blockchain).nbBloc);
+    struct Bloc bloc;
+    printf("1");
+    //Initialisation timestamp
+    //*bloc->timestamp = *"timestamp";//getTimeStamp(); // renvoie chaine type  "Fri Jan 19 13 :40 :09 2018"
+    //Initialisation timestamp
+
+    //time(&(bloc->timestamp));
+
+    //Initilisation de prev_hash, nb_transaction, liste (la liste de transactions)
+
+    if ((*blockchain).nbBloc == 0) { //si bloc genesis
+      strcpy(bloc.prev_hash,  "00000000000000000000000000000000000000000000000000000000000000000\0");
+      bloc.nb_trans = 1;
+      trans_wp(bloc.liste[0], "Creator", "Creator", 50*1000*10000);
+      sha256ofString((BYTE *)bloc.liste[0], bloc.hash_root);
+    }
+    else {
+      strcpy(bloc.prev_hash, (*blockchain).liste[(*blockchain).nbBloc].curr_hash);
+      bloc.nb_trans = rand()%10+1;
+      generate_trans(bloc.liste, bloc.nb_trans);
+      mTree(bloc.hash_root, bloc.liste, bloc.nb_trans);
+    }
+    //Initialisation nonce et indice
+    bloc.nonce = 0;
+    bloc.indice = (*blockchain).nbBloc;
+    //Calcul du hash du bloc
+    char chaine_curr_hash[(SHA256_BLOCK_SIZE*2 + 1)*2 + 28];
+    sprintf(chaine_curr_hash,"%s%s%s%d", bloc.prev_hash, ctime(&(bloc.timestamp)), bloc.hash_root, bloc.nonce);
+    sha256ofString((BYTE *)chaine_curr_hash, bloc.curr_hash);
+    //Ajout du bloc a la blockchain
+    (*blockchain).liste[(*blockchain).nbBloc] = bloc;
+    (*blockchain).nbBloc++;
+    printf("fin initbloc\n");
+  }
+}
+
+void initBlockchain(struct Blockchain *blockchain, int nbBloc) {
+  (*blockchain).diff = difficulte;
+  for (int co = 0 ; co <= nbBloc ; co++) {
+    initBloc(blockchain);
+  }  
+}
+
+//Creation d'un bloc particulier qui distribue 50BnB a tous les utilisateurs 
+void helicopter_money(struct Blockchain *blockchain) {
+  if ((*blockchain).nbBloc == 0 || (*blockchain).nbBloc > max_nb_bloc) {
+    printf("Pas de bloc Genesis, ou impossible de créer de nouveaux blocs.\n");
+  }
+  else  {
+    char* liste_user[10] = {"Creator", "Thomas", "Solene", "Lola", "Antonin", "Valentin", "Alicia", "Pauline", "Remi", "Papion" };
+    srand(time(NULL));
+    //Initialisation bloc
+    struct Bloc bloc;
+    //Initialisation timestamp
+    
+    //time(&bloc->timestamp);
+    //*bloc->timestamp = *"timestamp";
+
+
+    //Distribution de 50BnB a tous les users
+    for (int co = 1 ; co < strlen(*liste_user) ; co++) { //car strlen(liste_user) == 10 moins le creator & qu'on sait qu'il y moins de transactions que le max_nb_trans par bloc 
+      trans_wp(bloc.liste[co-1], "coinbase", liste_user[co], 50*1000*10000);
+    }
+    //Initialisation nb de transactions
+    bloc.nb_trans = strlen(*liste_user) - 1;
+    //Previous hash
+    strcpy(bloc.prev_hash, (*blockchain).liste[(*blockchain).nbBloc].curr_hash);
+    //arbre de merkle
+    mTree(bloc.hash_root, bloc.liste, bloc.nb_trans);
+    //Initialisation nonce et indice
+    bloc.nonce = 0;
+    bloc.indice = (*blockchain).nbBloc;
+    //Calcul du hash du bloc
+    char chaine_curr_hash[(SHA256_BLOCK_SIZE*2 + 1)*2 + 28];
+    sprintf(chaine_curr_hash,"%s%s%s%d", bloc.prev_hash, ctime(&(bloc.timestamp)), bloc.hash_root, bloc.nonce);
+    sha256ofString((BYTE *)chaine_curr_hash, bloc.curr_hash);
+    //Ajout du bloc a la blockchain
+    (*blockchain).liste[(*blockchain).nbBloc] = bloc;
+    ++(*blockchain).nbBloc;
+  }
+}
+
+int main(void) {
+  int nbBloc = 10;
+  struct Blockchain *test = malloc(sizeof(struct Blockchain*));
+  for (int co = 0 ; co <= nbBloc ; co++) {
+    initBloc(test);
+    printf("%s\n", test->liste[co].curr_hash);
+  }  
+  return 0;
+} 
